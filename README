@@ -1,0 +1,22 @@
+What is it
+==========
+
+This is a standalone libfusemod_*.so example FUSE module that does
+nothing.  Its purpose is to be used as a basis for real modules.
+
+How to compile
+==============
+
+To produce libfusemod_null.so:
+
+make FUSE_PREFIX=/toplevel/path/of/FUSE
+
+The path must contain the include/ subdirectory containing fuse.h.
+
+To clean: make clean
+
+How to run
+==========
+
+export LD_LIBRARY_PATH=$PWD:$LD_LIBRARY_PATH
+glassfs -o nonempty,modules=null test
