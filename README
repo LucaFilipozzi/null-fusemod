@@ -4,6 +4,21 @@ What is it
 This is a standalone libfusemod_*.so example FUSE module that does
 nothing.  Its purpose is to be used as a basis for real modules.
 
+Caveat
+======
+
+There is a warning though: like all .so fusemods, it suffer from a
+glibc bug described in:
+
+http://www.sourceware.org/ml/libc-help/2013-07/msg00015.html
+http://www.sourceware.org/ml/libc-help/2013-08/msg00005.html
+
+and as such, the compiled module will fail to register correctly into
+FUSE if FUSE has been compiled with -O2, until glibc is fixed.  As a
+workaround, you can compile FUSE with -O0 (./configure CFLAGS=-O0).
+
+Also, feel free to discuss this bug on the libc-help mailing list.
+
 How to compile
 ==============
 
