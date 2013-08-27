@@ -3,16 +3,40 @@
 #include <fuse3/fuse.h>
 #include <stdio.h>              /* fprintf ().  */
 #include <stdlib.h>             /* malloc ().  */
+#include <errno.h>              /* ENOMEM.  */
 
 typedef struct {
   struct fuse_fs *next;
 } null_t;
+
+/* null file info.  */
+typedef struct {
+  uint64_t fh_below;
+} nfi_t;
 
 static const struct fuse_opt null_opts[] = {
   FUSE_OPT_KEY("-h", 0),
   FUSE_OPT_KEY("--help", 0),
   FUSE_OPT_END
 };
+
+static nfi_t *
+nfi_of_fh (uint64_t fh)
+{
+  return (nfi_t *) fh;
+}
+
+static uint64_t
+fh_of_nfi (nfi_t *nfi)
+{
+  return (uint64_t) nfi;
+}
+
+static void
+nfi_destroy (nfi_t *nfi)
+{
+  free (nfi);
+}
 
 static void
 null_help (void)
@@ -126,21 +150,35 @@ static int
 null_open (const char *path, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_open (null->next, path, ffi);
+  nfi_t *nfi = malloc (sizeof *nfi);
+  if (nfi == NULL)
+    return -ENOMEM;
+  int ret = fuse_fs_open (null->next, path, ffi);
+  nfi->fh_below = ffi->fh;
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_read (const char *path, char *buf, size_t capacity, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_read (null->next, path, buf, capacity, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_read (null->next, path, buf, capacity, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_write (const char *path, const char *buf, size_t len, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_write (null->next, path, buf, len, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_write (null->next, path, buf, len, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
@@ -154,21 +192,33 @@ static int
 null_flush (const char *path, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_flush (null->next, path, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_flush (null->next, path, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_release (const char *path, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_release (null->next, path, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_release (null->next, path, ffi);
+  nfi_destroy (nfi);
+  return ret;
 }
 
 static int
 null_fsync (const char *path, int datasync, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_fsync (null->next, path, datasync, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_fsync (null->next, path, datasync, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
@@ -203,28 +253,46 @@ static int
 null_opendir (const char *path, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_opendir (null->next, path, ffi);
+  nfi_t *nfi = malloc (sizeof *nfi);
+  if (nfi == NULL)
+    return -ENOMEM;
+  int ret = fuse_fs_opendir (null->next, path, ffi);
+  nfi->fh_below = ffi->fh;
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_readdir (const char *path, void *buffer, fuse_fill_dir_t filler, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_readdir (null->next, path, buffer, filler, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_readdir (null->next, path, buffer, filler, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_releasedir (const char *path, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_releasedir (null->next, path, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_releasedir (null->next, path, ffi);
+  nfi_destroy (nfi);
+  return ret;
 }
 
 static int
 null_fsyncdir (const char *path, int datasync, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_fsyncdir (null->next, path, datasync, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_fsyncdir (null->next, path, datasync, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static void *
@@ -253,28 +321,46 @@ static int
 null_create (const char *path, mode_t mode, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_create (null->next, path, mode, ffi);
+  nfi_t *nfi = malloc (sizeof *nfi);
+  if (nfi == NULL)
+    return -ENOMEM;
+  int ret = fuse_fs_create (null->next, path, mode, ffi);
+  nfi->fh_below = ffi->fh;
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_ftruncate (const char *path, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_ftruncate (null->next, path, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_ftruncate (null->next, path, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_fgetattr (const char *path, struct stat *st, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_fgetattr (null->next, path, st, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_fgetattr (null->next, path, st, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_lock (const char *path, struct fuse_file_info *ffi, int cmd, struct flock *fl)
 {
   null_t *null = null_get ();
-  return fuse_fs_lock (null->next, path, ffi, cmd, fl);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_lock (null->next, path, ffi, cmd, fl);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
@@ -295,42 +381,66 @@ static int
 null_ioctl (const char *path, int cmd, void *arg, struct fuse_file_info *ffi, unsigned int flags, void *data)
 {
   null_t *null = null_get ();
-  return fuse_fs_ioctl (null->next, path, cmd, arg, ffi, flags, data);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_ioctl (null->next, path, cmd, arg, ffi, flags, data);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_poll (const char *path, struct fuse_file_info *ffi, struct fuse_pollhandle *ph, unsigned *reventsp)
 {
   null_t *null = null_get ();
-  return fuse_fs_poll (null->next, path, ffi, ph, reventsp);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_poll (null->next, path, ffi, ph, reventsp);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_write_buf (const char *path, struct fuse_bufvec *buf, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_write_buf (null->next, path, buf, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_write_buf (null->next, path, buf, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_read_buf (const char *path, struct fuse_bufvec **bufp, size_t size, off_t off, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_read_buf (null->next, path, bufp, size, off, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_read_buf (null->next, path, bufp, size, off, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_flock (const char *path, struct fuse_file_info *ffi, int op)
 {
   null_t *null = null_get ();
-  return fuse_fs_flock (null->next, path, ffi, op);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_flock (null->next, path, ffi, op);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static int
 null_fallocate (const char *path, int mode, off_t off, off_t length, struct fuse_file_info *ffi)
 {
   null_t *null = null_get ();
-  return fuse_fs_fallocate (null->next, path, mode, off, length, ffi);
+  nfi_t *nfi = nfi_of_fh (ffi->fh);
+  ffi->fh = nfi->fh_below;
+  int ret = fuse_fs_fallocate (null->next, path, mode, off, length, ffi);
+  ffi->fh = fh_of_nfi (nfi);
+  return ret;
 }
 
 static const struct fuse_operations null_oper = {
